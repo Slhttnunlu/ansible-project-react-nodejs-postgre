@@ -1,0 +1,42 @@
+- name: configure react instance
+  hosts: _ansible_react
+  become: true
+  tasks:
+    
+  # at this point do not forget change REACT_APP_BASE_URL env variable for nodejs node
+    - name: copy files to the react node
+      copy:
+        src: /home/ec2-user/ansible/ansible-project/react/
+        dest: /home/ec2-user/react
+
+    - name: remove cw_react container
+      community.docker.docker_container:
+        name: cw_react
+        state: absent
+        force_kill: true
+
+    - name: remove clarusway/react image
+      community.docker.docker_image:
+        name: clarusway/react
+        state: absent
+  
+    - name: build container image
+      community.docker.docker_image:
+        name: clarusway/react
+        build:
+          path: /home/ec2-user/react
+        source: build
+        state: present
+
+    - name: Launch postgresql docker container
+      community.docker.docker_container:
+        name: cw_react
+        image: clarusway/react
+        state: started
+        ports: 
+        - "3000:3000"
+      register: container_info
+    
+    - name: print the container info
+      ansible.builtin.debug:
+        var: container_info

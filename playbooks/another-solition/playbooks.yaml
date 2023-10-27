@@ -1,0 +1,8 @@
+- ansible.builtin.import_playbook: install_docker.yaml
+- ansible.builtin.import_playbook: docker_postgre.yaml
+- ansible.builtin.import_playbook: docker_nodejs.yaml
+- ansible.builtin.import_playbook: docker_react.yaml
+
+
+
+  

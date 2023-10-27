@@ -1,0 +1,99 @@
+---
+- name: configure postgresql
+  hosts: _ansible_postgresql
+  become: true
+  vars_files:
+    - secret.yaml
+  tasks:
+    - name: upgrade all packages
+      ansible.builtin.yum:
+        name: '*' # sistem update islemi ansible doc de yaziyo
+        state: latest
+    #docker doc da kurulum kismina bakiyoruz orda tek tek ornek veriyo once sil diyo sistemdeki docker la ilgili uygulamalari vs
+    - name: remove older version of docker
+      ansible.builtin.yum:
+        name:
+          - docker
+          - docker-client
+          - docker-client-latest
+          - docker-common
+          - docker-latest
+          - docker-latest-logrotate
+          - docker-logrotate
+          - docker-engine
+        state: removed
+    #yine docker doc dan devam
+    - name: install yum utils
+      ansible.builtin.yum:
+        name: "yum-utils"
+        state: latest
+    #bu linkten package i cekmek gerekiyo onuda linux de package lerin tutuldugu path belli standart bu path de git gibi genel uygulamalar var direk oraya bakarak kurabiliyo ama docker gibi uygulamlar icin o pathe eklemek gerekiyor download linkini
+    - name: add docker repo
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/centos/docker-ce.repo
+        dest: /etc/yum.repos.d/docker-ce.repo
+
+    - name: install docker        
+      ansible.builtin.package:
+        name: docker-ce
+        state: latest
+    
+    - name: add ec2-user to docker group
+      ansible.builtin.user:
+        name: ec2-user
+        groups: docker
+        append: yes #diger gruplardan cikarmadan sadece docker grubuna ekliyor onun icin
+    
+    - name: start docker service
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: copy files to the postgresql node
+      ansible.builtin.copy:
+        src: /home/ec2-user/ansible/ansible-project/postgres/
+        dest: /home/ec2-user/postgresql
+    
+    - name: remove cw_postgre container
+      community.docker.docker_container:
+        name: cw_postgre
+        state: absent
+        force_kill: true #bu calisan kontaier silmek icin calisani sil dersen hata verir normalde --force islemi icin yani
+
+    - name: remove clarusway/postgre image
+      community.docker.docker_image:
+        name: clarusway/postgre
+        state: absent
+    
+    - name: build container image
+      community.docker.docker_image:
+        name: clarusway/postgre
+        build:
+          path: /home/ec2-user/postgresql #bu docker build deki . nin gorevi
+        source: build
+        state: present
+      register: image_info #buda debug da kullanmak icin rasgele bir isim veriyoruz registery ye sonraki islemde buna bakicaz olmusmu diye yani docker image ls islemi yapicaz
+
+    - name: print to image latest
+      ansible.builtin.debug:
+        var: image_info
+
+    - name: launch postgresql docker container
+      community.docker.docker_container:
+        name: cw_postgre
+        image: clarusway/postgre
+        state: started
+        ports:
+          - "5432:5432"
+        env:
+          POSTGRES_PASSWORD: "{{ password }}"
+        volumes:
+          - /db-data:/var/lib/postgresql/data
+      register: container_info
+
+    - name: print the container image_info
+      ansible.builtin.debug:
+        var: container_info
+          
+    

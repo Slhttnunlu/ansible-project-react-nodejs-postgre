@@ -1,0 +1,55 @@
+---
+- name: configure postgresql
+  hosts: _ansible_postgresql
+  become: true
+  vars_files:
+    - secret.yaml
+  tasks:
+   
+    - name: copy files to the postgresql node
+      ansible.builtin.copy:
+        src: /home/ec2-user/ansible/ansible-project/postgres/
+        dest: /home/ec2-user/postgresql
+    
+    - name: remove cw_postgre container
+      community.docker.docker_container:
+        name: cw_postgre
+        state: absent
+        force_kill: true #bu calisan kontaier silmek icin calisani sil dersen hata verir normalde --force islemi icin yani
+
+    - name: remove clarusway/postgre image
+      community.docker.docker_image:
+        name: clarusway/postgre
+        state: absent
+    
+    - name: build container image
+      community.docker.docker_image:
+        name: clarusway/postgre
+        build:
+          path: /home/ec2-user/postgresql #bu docker build deki . nin gorevi
+        source: build
+        state: present
+      register: image_info #buda debug da kullanmak icin rasgele bir isim veriyoruz registery ye sonraki islemde buna bakicaz olmusmu diye yani docker image ls islemi yapicaz
+
+    - name: print to image latest
+      ansible.builtin.debug:
+        var: image_info
+
+    - name: launch postgresql docker container
+      community.docker.docker_container:
+        name: cw_postgre
+        image: clarusway/postgre
+        state: started
+        ports:
+          - "5432:5432"
+        env:
+          POSTGRES_PASSWORD: "{{ password }}"
+        volumes:
+          - /db-data:/var/lib/postgresql/data
+      register: container_info
+
+    - name: print the container image_info
+      ansible.builtin.debug:
+        var: container_info
+          
+    
